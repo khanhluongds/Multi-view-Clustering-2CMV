@@ -1,15 +1,15 @@
-%Date 30 Sep 2019 copy from Journal_2CMV_Fullmeasurement_No_l2NormonS_cora.m
-%add para in the function to allow choosing norm for S when running
-%date: 13Jan 2019. Copy from TwoC_For_MV_ComplementaryManifold_l2normonS,
-%TwoC_For_MV _learning using both coupled matrix and normal NMF, add diverse between two views, l2 norm on H_v, 
+%Date 30 Sep 2019 copy from Journal_2CMV_Fullmeasurement_No_l2NormonW_cora.m
+%add para in the function to allow choosing norm for W when running
+%date: 13Jan 2019. Copy from TwoC_For_MV_ComplementaryManifold_l2normonW,
+%TwoC_For_MV _learning using both coupled matrix and normal NMF, add diverse between two views, l2 norm on H_v,
 %update rule similar to diverNMF
-%parameters: beta for the diverse between G_v and G_star and eta for the l2_norm
-%note: alreadly use l2-norm on G_star
+%parameters: beta for the diverse between H_v and H_star and eta for the l2_norm
+%note: alreadly use l2-norm on H_star
 
 %% add Learning L_complementary with the parameter gama
 
-                                                                                                                                  
-function [G_final, Gstar_final, nIter_final, S_final, objhistory_final, nIteration] = TwoCMV_nocetanmf(normonS,normonG, gnd, m, n,  R, G, Lcomple, nClass, nfea, options)
+
+function [Hv, Hstar_final, nIter_final, W_final, objhistory_final, nIteration] = TwoCMV_function(normonW,normonH, gnd, m, n,  R, H, Lcomple, nClass, nfea, options)
 if ~isfield(options,'error')
     options.error = 1e-6;
 end
@@ -37,10 +37,10 @@ if ~isfield(options,'Optimization')
     options.Optimization = 'Multiplicative';
 end
 
-if ~exist('G1','var') %k
-    G1 = [];
-    G2 = [];
-    S = [];
+if ~exist('H1','var') %k
+    H1 = [];
+    H2 = [];
+    W = [];
 end
 
 differror = options.error;
@@ -52,21 +52,16 @@ if ~isempty(maxIter) && maxIter < minIter
 end
 meanFitRatio = options.meanFitRatio;
 
-G = l1_norm(G,m);
+H = l1_norm(H,m);
 for i = 1:m
-    G_final{i} = G{i};
+    Hv{i} = H{i};
 end
-G_star = zeros(n,nClass);
+H_star = zeros(n,nClass);
 for i = 1:m
-    G_star = G_star + 1/m*G{i};
-end;
-G_star = l1_norm_onematrix(G_star);
-Gstar_final = G_star;
-
-Norm = 2;
-NormV = 0;
-
-%construct L based on u
+    H_star = H_star + 1/m*H{i};
+end
+H_star = l1_norm_onematrix(H_star);
+Hstar_final = H_star;
 
 u = ones(1, 1);
 u = [1];
@@ -76,20 +71,7 @@ for i = 1:size(u,2)
     u(:,i) = u(:,i)/sumu;
 end
 
-% u_final = u;
-% Lnorm = Lcompati;
-% for i = 1:m
-%     Lnorm{i} = zeros(n,n);
-%     for j = 1:size(u_final,2)
-%         Lnorm{i} = L{i};
-%     end
-% end
-
-% for i = 1:m
-%     Lcomple = Lcomple + 1/m*Lnorm{i};
-% end
-
-%% calculate and use new Lcompatible
+%% Normalize the Optimal Manifold
 Lcomple1 = cell(m,1);
 Lcomple0 = cell(m,1);
 
@@ -98,29 +80,23 @@ Lcomple0 = zeros(size(Lcomple,1),size(Lcomple,2));
 Lcomple1 = (abs(Lcomple) + Lcomple)*0.5;
 Lcomple0 = (abs(Lcomple) - Lcomple)*0.5;
 
-%% end chuan bi L
+%% end L
 
 selectInit = 1;
 Rd_t = R{1,1};
 nSmp = size(Rd_t,1);
 mFea = size(Rd_t,2);
 % Initialize the data and feature matrices
-G = initializeMV2018(R, nClass, m);
+H = initializeMV2018(R, nClass, m);
 
-% initialise matrix S
-S = cell(m,1);
+% initialise matrix W
+W = cell(m,1);
 for i=1:m
-    S{i}=ones(nfea(i),nClass);
+    W{i}=ones(nfea(i),nClass);
 end
 tryNo = 0;
 nIter = 0;
 nIteration = 0;
-% options.ceta = 1;
-% options.eta = 1;
-% options.beta = 1;
-ceta = options.ceta
-eta = options.eta
-para_nmf = options.para_nmf
 
 while tryNo < nRepeat
     tryNo = tryNo+1;
@@ -128,89 +104,75 @@ while tryNo < nRepeat
     while(maxErr > differror)
         nIteration = nIteration + 1;
         
-        % ===================== update S ~~ update all W_v========================
-        S = updateS(S, G, G_star, R, m, nfea, nClass, options);
-        
-        if normonS == 1
-            S = l1_norm(S,m);
-        else 
-            if normonS == 2
+        % ===================== update W ~~ update all W_v========================
+        W = updateW(W, H, H_star, R, m, nfea, nClass, options);
+        if normonW == 1
+            W = l1_norm(W,m);
+        else
+            if normonW == 2
                 for v = 1:m
-                    S{v,1} = NormalizeFea(S{v,1});
+                    W{v,1} = NormalizeFea(W{v,1});
                 end
             end
         end
-        
-
-%         S = l1_norm(S,m);
-        % ===================== update G ~~ update all H_v========================
-        G_star = updateG_star(S, G, G_star,R,m, nClass, nSmp, options); 
-
-%         G_star = NormalizeFea(G_star);
-%         G_star = l1_norm_onematrix(G_star);
-        G = updateG(S, G, G_star,R,m, Lcomple, Lcomple1, Lcomple0,  nClass, nSmp, options);
-        % ===================== update G_star ~~ update H_star ========================
-        
-        if normonG ==1
-            G = l1_norm(G,m);
+        % ===================== update H_star ~~ update H_star and update H ~~ update all H_v========================
+        H_star = updateH_star(W, H, H_star,R,m, nClass, nSmp, options);
+        H = updateH(W, H, H_star,R,m, Lcomple, Lcomple1, Lcomple0,  nClass, nSmp, options);        
+        if normonH ==1
+            H = l1_norm(H,m);
         end
-        
         nIter = nIter + 1;
-        
-        
         %  When U, V run nIter times
         if nIter > minIter
             if selectInit
-                objhistory =  CalculateObj(R, S, G, G_star, Lcomple, m, options);
+                objhistory =  CalculateObj(R, W, H, H_star, Lcomple, m, options);
                 maxErr = 0;
             else
                 if isempty(maxIter)
-                    newobj =  CalculateObj(R, S, G, G_star, Lcomple, m, options);
-                    objhistory = [objhistory newobj]; %#ok<AGROW>
+                    newobj =  CalculateObj(R, W, H, H_star, Lcomple, m, options);
+                    objhistory = [objhistory newobj]; 
                     meanFit = meanFitRatio*meanFit + (1-meanFitRatio)*newobj;
                     maxErr = (meanFit-newobj)/meanFit;
                 else
                     if isfield(options,'Converge') && options.Converge
-                        newobj =  CalculateObj(R, S, G, G_star, Lcomple, m, options);
+                        newobj =  CalculateObj(R, W, H, H_star, Lcomple, m, options);
                         
-                        objhistory = [objhistory newobj]; %#ok<AGROW>
+                        objhistory = [objhistory newobj]; 
                         meanFit = meanFitRatio*meanFit + (1-meanFitRatio)*newobj;%k
                         maxErr = (meanFit-newobj)/meanFit;% k
                         
                     end
-                    %                     maxErr = 1;
                     if nIter >= maxIter
                         maxErr = 0;
                         if isfield(options,'Converge') && options.Converge
                         else
                             objhistory = 0;
                         end
-                                             
+                        
                     end
                 end
             end
         end
     end
-    
     %     When nIter achieves minIter, run the following code segment
     if tryNo == 1
         for i = 1:m
-            G_final{i} = G{i};
+            Hv{i} = H{i};
         end
-        Gstar_final = G_star;
+        Hstar_final = H_star;
         for i=1:m
-            S_final{i } = S{i };
+            W_final{i } = W{i };
         end
         nIter_final = nIter;
         objhistory_final = objhistory;
     else
         if objhistory(end) < objhistory_final(end)
             for i = 1:m
-                G_final{i} = G{i};
+                Hv{i} = H{i};
             end
-            Gstar_final = G_star;
+            Hstar_final = H_star;
             for i=1:m
-                S_final{i } = S{i };
+                W_final{i } = W{i };
             end
             nIter_final = nIter;
             objhistory_final = objhistory;
@@ -220,7 +182,7 @@ while tryNo < nRepeat
     if selectInit
         if tryNo < nRepeat
             %re-start
-            G = initializeMV2018(R, nClass,m);
+            H = initializeMV2018(R, nClass,m);
             
             nIter = 0;
         else
@@ -228,105 +190,87 @@ while tryNo < nRepeat
             nIter = minIter+1;
             selectInit = 0;
             for i = 1:m
-                G{i} = G_final{i};
+                H{i} = Hv{i};
             end
-            Gstar = Gstar_final;
+            Hstar = Hstar_final;
             for i=1:m
-                S{i } = S_final{i };
+                W{i } = W_final{i };
             end
             objhistory = objhistory_final;
             meanFit = objhistory*10;
         end
     end
 end
-    %==========================================================================
-function objhistory_final = CalculateObj(R,S, G,G_star, Lcomple, m, options)
-    obj_NMF = 0;
-    for i=1:m
-        obj_NMF = obj_NMF + norm(R{i} - G{i}*S{i}','fro');
-    end
+%==========================================================================
+function objhistory_final = CalculateObj(R,W, H,H_star, Lcomple, m, options)
+obj_NMF = 0;
+for i=1:m
+    obj_NMF = obj_NMF + norm(R{i} - H{i}*W{i}','fro');
+end
 
-    obj_NMF_coupled = 0;
-    for i=1:m
-        obj_NMF_coupled = obj_NMF_coupled + norm(R{i} - G_star*S{i}','fro');
-    end
+obj_NMF_coupled = 0;
+for i=1:m
+    obj_NMF_coupled = obj_NMF_coupled + norm(R{i} - H_star*W{i}','fro');
+end
 
-    obj_diver = 0;
-    
-    for v = 1:m
-        obj_diver = obj_diver + trace(G_star*G{v}');
-    end
-    obj_l2norm = 0; 
-    for v = 1:m
-        obj_l2norm = obj_l2norm + trace(G{v}'*G{v});
-    end
-    %Complementary manifold for G_v
-    obj_compleManifold = 0;
-    for v = 1:m
-        obj_compleManifold = obj_compleManifold + trace(G{v}'*Lcomple*G{v});
-    end
-    obj_manifold = options.alpha*obj_compleManifold; 
-    objhistory_final = obj_NMF + obj_NMF_coupled + options.beta*obj_diver + options.eta*obj_l2norm + options.eta*trace(G_star'*G_star) + obj_manifold; % + beta*obj_norm;
+obj_diver = 0;
+
+for v = 1:m
+    obj_diver = obj_diver + trace(H_star*H{v}');
+end
+obj_l2norm = 0;
+for v = 1:m
+    obj_l2norm = obj_l2norm + trace(H{v}'*H{v});
+end
+%Complementary manifold for H_v
+obj_compleManifold = 0;
+for v = 1:m
+    obj_compleManifold = obj_compleManifold + trace(H{v}'*Lcomple*H{v});
+end
+obj_manifold = options.alpha*obj_compleManifold;
+objhistory_final = obj_NMF + obj_NMF_coupled + options.beta*obj_diver + options.eta*obj_l2norm + options.eta*trace(H_star'*H_star) + obj_manifold; % + beta*obj_norm;
 
 
-%%    
-function G = l1_norm(G,m)
-    for p = 1:m
-        for i = 1:size(G{p},1)
-            if sum(G{p}(i,:))~= 0
-                G{p}(i,:) = G{p}(i,:)/sum(G{p}(i,:));
-            else
-                for j = 1:size(G{p},2)
-                    G{p}(i,j) = 1/(size(G{p},2));
-                end
+%%
+function H = l1_norm(H,m)
+for p = 1:m
+    for i = 1:size(H{p},1)
+        if sum(H{p}(i,:))~= 0
+            H{p}(i,:) = H{p}(i,:)/sum(H{p}(i,:));
+        else
+            for j = 1:size(H{p},2)
+                H{p}(i,j) = 1/(size(H{p},2));
             end
         end
     end
-    %%
-    function G = l1_norm_onematrix(G)
-         for i = 1:size(G,1)
-            if sum(G(i,:))~= 0
-                G(i,:) = G(i,:)/sum(G(i,:));
-            else
-                for j = 1:size(G,2)
-                    G(i,j) = 1/(size(G,2));
-                end
-            end
+end
+%%
+function H = l1_norm_onematrix(H)
+for i = 1:size(H,1)
+    if sum(H(i,:))~= 0
+        H(i,:) = H(i,:)/sum(H(i,:));
+    else
+        for j = 1:size(H,2)
+            H(i,j) = 1/(size(H,2));
         end
- 
-    
-    % function [G,S] = NormalizeGS(G, S)
-    % n = size(G,1);
-    % c = size(S,2);
-    %
-    % norms = sqrt(sum(G.^2,1));
+    end
+end
 
-%%Update all W_v    
-% function S = updateS(S,G,G_star, R, m, nfea, nClass) %update all W_v
-% for v=1:m
-%     tempup = zeros(nfea(v),nClass);
-%     tempun = zeros(nfea(v),nClass);
-%     
-%     tempup = tempup + R{v}'*G{v} + R{v}'*G_star;
-%     tempun = tempun + S{v}*G{v}'*G{v} + S{v}*G_star'*G_star;
-%     S{v} = S{v}.*power((tempup./tempun),(0.5));
-%     % 		S{i} = S{i}.*(VV1./max(VV2,1e-10));
-% end
-function S = updateS(S,G,G_star, R, m, nfea, nClass, options) %update all W_v
+function W = updateW(W,H,H_star, R, m, nfea, nClass, options) %update all W_v
 ceta = options.ceta;
 para_nmf = options.para_nmf;
 for v=1:m
     tempup = zeros(nfea(v),nClass);
     tempun = zeros(nfea(v),nClass);
     
-    tempup = tempup + R{v}'*G{v} + R{v}'*G_star;
-    tempun = tempun + S{v}*G{v}'*G{v} + S{v}*G_star'*G_star;
-    S{v} = S{v}.*power((tempup./tempun),(0.5));
-    % 		S{i} = S{i}.*(VV1./max(VV2,1e-10));
+    tempup = tempup + R{v}'*H{v} + R{v}'*H_star;
+    tempun = tempun + W{v}*H{v}'*H{v} + W{v}*H_star'*H_star;
+    W{v} = W{v}.*power((tempup./tempun),(0.5));
+    % 		W{i} = W{i}.*(VV1./max(VV2,1e-10));
 end
 
-%% Update G_star
-function G_star = updateG_star(S, G, G_star, R, m, nClass, nSmp, options)
+%% Update H_star
+function H_star = updateH_star(W, H, H_star, R, m, nClass, nSmp, options)
 %alpha = options.alpha;
 beta = options.beta;
 eta = options.eta;
@@ -334,56 +278,52 @@ eta = options.eta;
 tempup_1 = zeros(nSmp, nClass);
 tempun_1 =zeros(nClass, nClass);
 for v = 1:m
-    tempup_1 = tempup_1 + R{v}*S{v};
-%     tempup_2 = tempup_2 + G{v}*D';
-    tempun_1 = tempun_1 + S{v}'*S{v};
-%     tempun_2 = tempun_2 + G{v}*D';
+    tempup_1 = tempup_1 + R{v}*W{v};
+    tempun_1 = tempun_1 + W{v}'*W{v};
 end
-tempup = tempup_1;  
+tempup = tempup_1;
 
-sumG_v = zeros(nSmp, nClass);
+sumH_v = zeros(nSmp, nClass);
 for v = 1:m
-   sumG_v = sumG_v + beta/m*G{v};     
+    sumH_v = sumH_v + beta/m*H{v};
 end
-tempun = G_star*tempun_1 + sumG_v + eta*G_star; % + alpha*Lcompati1*G_star; %setting alpha = 0 to ignore Lcompati
- 
-for j = 1:size(G_star,2)
-    for i = 1:size(G_star,1)
+tempun = H_star*tempun_1 + sumH_v + eta*H_star; % + alpha*Lcompati1*H_star; %setting alpha = 0 to ignore Lcompati
+
+for j = 1:size(H_star,2)
+    for i = 1:size(H_star,1)
         if tempun(i,j)~=0
-            G_star(i,j) = G_star(i,j)*(tempup(i,j)/tempun(i,j))^(0.5);
+            H_star(i,j) = H_star(i,j)*(tempup(i,j)/tempun(i,j))^(0.5);
         else
-            G_star(i,j) = 0;
+            H_star(i,j) = 0;
         end
     end
 end
 
-%% update all G_v
-function G = updateG(S, G, G_star, R, m, Lcomple, Lcomple1, Lcomple0, nClass, nSmp, options) 
+%% update all H_v
+function H = updateH(W, H, H_star, R, m, Lcomple, Lcomple1, Lcomple0, nClass, nSmp, options)
 alpha = options.alpha;
 beta = options.beta;
 eta = options.eta;
 para_nmf = options.para_nmf;
-
-for v = 1:m   
+for v = 1:m
     tempup = zeros(nSmp,nClass);
     tempun = zeros(nSmp,nClass);
-    tempup = tempup + R{v}*S{v}; 
-    tempup = tempup + alpha*Lcomple0*G{v};
-    sumG_t = zeros(nSmp, nClass);
-
-    tempun = tempun + G{v}*S{v}'*S{v}+ 1/m*beta*G_star + eta*G{v}+ alpha*Lcomple1*G{v};
-
-    for j = 1:size(G{v},2)
-        for i = 1:size(G{v},1)
+    tempup = tempup + R{v}*W{v};
+    tempup = tempup + alpha*Lcomple0*H{v};
+    sumH_t = zeros(nSmp, nClass);
+    tempun = tempun + H{v}*W{v}'*W{v}+ 1/m*beta*H_star + eta*H{v}+ alpha*Lcomple1*H{v};
+    
+    for j = 1:size(H{v},2)
+        for i = 1:size(H{v},1)
             if tempun(i,j)~=0
-                G{v}(i,j) = G{v}(i,j)*(tempup(i,j)/tempun(i,j))^(0.5);
+                H{v}(i,j) = H{v}(i,j)*(tempup(i,j)/tempun(i,j))^(0.5);
             else
-                G{v}(i,j) = 0;
+                H{v}(i,j) = 0;
             end
         end
     end
 end
 
-                    
-                    
-                    
+
+
+
